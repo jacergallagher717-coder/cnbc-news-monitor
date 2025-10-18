@@ -40,28 +40,29 @@ def is_breaking_news(title):
     title_lower = title.lower()
     return any(keyword in title_lower for keyword in keywords)
 
-async def send_to_telegram(text):
-    """Send message to Telegram bot"""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("❌ Telegram not configured")
-        return False
+async def send_to_backend(title, link):
+    """Send article directly to backend for AI analysis"""
+    backend_url = "https://market-impact-bot-v2.onrender.com/webhook/telegram"
     
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    # Format as message text (like a user would send)
+    message_text = f"{title}\n\n{link}"
     
-    async with httpx.AsyncClient(timeout=10) as client:
+    # Send as Telegram webhook payload
+    payload = {
+        "message": {
+            "text": message_text,
+            "chat": {"id": 123456789},  # Dummy ID
+            "from": {"id": 999999999, "is_bot": False}
+        }
+    }
+    
+    async with httpx.AsyncClient(timeout=30) as client:
         try:
-            response = await client.post(
-                url,
-                json={
-                    "chat_id": TELEGRAM_CHAT_ID,
-                    "text": text,
-                    "parse_mode": "Markdown"
-                }
-            )
+            response = await client.post(backend_url, json=payload)
             response.raise_for_status()
             return True
         except Exception as e:
-            print(f"❌ Telegram error: {e}")
+            print(f"❌ Backend error: {e}")
             return False
 
 async def check_cnbc_feed(feed_url):
@@ -102,7 +103,7 @@ async def monitor_loop():
     print("🚀 CNBC Monitor started!")
     print(f"📡 Monitoring {len(CNBC_FEEDS)} feeds")
     print(f"⏰ Check interval: 30 seconds")
-    print(f"📱 Telegram: {'✅ Configured' if TELEGRAM_BOT_TOKEN else '❌ Not configured'}")
+    print(f"🔗 Backend: https://market-impact-bot-v2.onrender.com")
     print("-" * 50)
     
     cycle = 0
@@ -120,20 +121,19 @@ async def monitor_loop():
                 articles = await check_cnbc_feed(feed_url)
                 all_new_articles.extend(articles)
             
-            # Send to Telegram
+            # Send to backend for analysis
             if all_new_articles:
-                print(f"📨 Sending {len(all_new_articles)} articles to Telegram...")
+                print(f"📨 Sending {len(all_new_articles)} articles to backend for AI analysis...")
                 
                 for article in all_new_articles:
-                    message = f"🚨 *CNBC Breaking News*\n\n{article['title']}\n\n{article['link']}"
-                    success = await send_to_telegram(message)
+                    success = await send_to_backend(article['title'], article['link'])
                     
                     if success:
-                        print(f"✅ Sent: {article['title'][:50]}...")
+                        print(f"✅ Analyzed: {article['title'][:50]}...")
                     else:
-                        print(f"❌ Failed to send")
+                        print(f"❌ Failed to analyze")
                     
-                    await asyncio.sleep(2)  # Avoid rate limits
+                    await asyncio.sleep(3)  # Space out requests
             else:
                 print("✅ No new articles")
             
